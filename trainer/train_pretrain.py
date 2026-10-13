@@ -37,6 +37,7 @@ def main():
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--warmup", type=int, default=500)
     ap.add_argument("--steps", type=int, default=3000)
+    ap.add_argument("--max_minutes", type=float, default=0, help="stop (sample + save) after this long")
     ap.add_argument("--shift", type=float, default=3.0)
     ap.add_argument("--p_drop", type=float, default=0.1, help="caption dropout for CFG")
     ap.add_argument("--p_image", type=float, default=0.2, help="prob. a batch is trained as images (frame 0)")
@@ -78,7 +79,7 @@ def main():
     n_params = sum(p.numel() for p in model.parameters()) / 1e6
     log(f"DiT-{args.preset}: {n_params:.1f}M params | {len(ds):,d} clips | batch {args.batch} | args {vars(args)}")
 
-    it, t_log, seen = iter(loader), time.time(), 0
+    it, t_log, seen, t_start = iter(loader), time.time(), 0, time.time()
     while step < args.steps:
         try:
             z, caps = next(it)
@@ -101,6 +102,7 @@ def main():
         ema.update(model, step)
         step += 1
         seen += z.shape[0]
+        timeout = args.max_minutes and (time.time() - t_start) / 60 > args.max_minutes
 
         if step % args.log_every == 0:
             dt = time.time() - t_log
@@ -108,7 +110,7 @@ def main():
                 f"lr {opt.param_groups[0]['lr']:.2e} | {seen / dt:.1f} clips/s | "
                 f"{torch.cuda.max_memory_allocated() / 2**30:.1f} GiB")
             t_log, seen = time.time(), 0
-        if step % args.sample_every == 0 or step == args.steps:
+        if step % args.sample_every == 0 or step == args.steps or timeout:
             # the VAE only lives on the GPU while sampling: an 8 GB card can't hold it during training
             vae = WanVAE(dtype=torch.bfloat16)
             prompts = PROMPTS + [truncate(ds.long[i]) for i in ds.index[:2]]  # last two: seen in training
@@ -117,8 +119,11 @@ def main():
             torch.cuda.empty_cache()
             save_gif(videos, os.path.join(args.out, "samples", f"step_{step:06d}.gif"))
             log(f"samples -> {args.out}/samples/step_{step:06d}.gif | prompts: {prompts[-2:]}")
-        if step % args.save_every == 0 or step == args.steps:
+        if step % args.save_every == 0 or step == args.steps or timeout:
             save_checkpoint(ckpt, model, ema, opt, step, args)
+        if timeout:
+            log(f"reached --max_minutes {args.max_minutes} at step {step}")
+            break
 
 
 if __name__ == "__main__":

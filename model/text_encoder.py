@@ -20,7 +20,8 @@ class TextEncoder:
         An end-of-text token is appended so even an empty prompt (used for CFG) has one token.
         """
         texts = [t + self.tok.eos_token for t in texts]
+        # pad to a multiple of 32 so torch.compile only ever sees a few text lengths
         x = self.tok(texts, padding="longest", truncation=True, max_length=self.max_len,
-                     return_tensors="pt").to(self.device)
+                     pad_to_multiple_of=32, return_tensors="pt").to(self.device)
         h = self.model(**x).last_hidden_state
         return h, x.attention_mask.bool()

@@ -8,6 +8,14 @@ import torch
 WAN_VAE_REPO = "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
 
 
+def latent_stats(repo=WAN_VAE_REPO):
+    """Per-channel latent mean/std [48] from the VAE config, without loading the weights."""
+    import json
+    from huggingface_hub import hf_hub_download
+    c = json.load(open(hf_hub_download(repo, "vae/config.json")))
+    return torch.tensor(c["latents_mean"]), torch.tensor(c["latents_std"])
+
+
 class WanVAE:
     def __init__(self, repo=WAN_VAE_REPO, device="cuda", dtype=torch.float32):
         from diffusers import AutoencoderKLWan

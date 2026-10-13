@@ -2,3 +2,5 @@ data/
 .venv/
 __pycache__/
 *.log
+.env
+out/

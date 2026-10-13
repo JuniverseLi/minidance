@@ -1,0 +1,36 @@
+[project]
+name = "minidance"
+version = "0.0.1"
+description = "Train a small text-to-video model from scratch on nature scenery"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "torch>=2.8",
+    "torchvision",
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "pylance",
+    "opencv-python-headless",
+    "pillow",
+    "imageio",
+    "tqdm",
+    "huggingface_hub",
+    "diffusers>=0.41.0",
+    "accelerate>=1.15.0",
+    "safetensors>=0.8.0",
+    "einops>=0.8.2",
+    "lpips>=0.1.4",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv]
+# Anaconda's Python ships an old VC++ runtime (14.29) that breaks torch's DLLs on Windows.
+python-preference = "only-managed"

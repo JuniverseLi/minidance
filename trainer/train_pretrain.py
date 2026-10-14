@@ -11,7 +11,7 @@ import time
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from dataset.latent_dataset import LatentDataset, truncate
+from dataset.latent_dataset import LatentDataset
 from model.dit import build_dit
 from model.flow import flow_loss
 from model.text_encoder import TextEncoder
@@ -26,7 +26,7 @@ PROMPTS = [
 ]
 
 
-def main():
+def build_parser():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_dir", default="data/latents")
     ap.add_argument("--shards", type=int, nargs="*")
@@ -46,22 +46,21 @@ def main():
     ap.add_argument("--sample_every", type=int, default=1000)
     ap.add_argument("--save_every", type=int, default=1000)
     ap.add_argument("--out", default="out/pretrain")
-    ap.add_argument("--resume", action="store_true")
+    ap.add_argument("--resume", action="store_true", help="continue from <out>/ckpt.pt if it exists")
+    ap.add_argument("--init", help="start from the EMA weights of another ckpt.pt (fresh optimizer)")
     ap.add_argument("--compile", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
-    args = ap.parse_args()
+    return ap
 
+
+def train(args, ds, sampler=None):
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     torch.backends.cuda.matmul.allow_tf32 = True
     dev = "cuda"
     log = Logger(os.path.join(args.out, "train.log"))
-
-    ds = LatentDataset(args.data_dir, args.shards, args.short_captions)
-    if args.max_clips:
-        ds.index = ds.index[:args.max_clips]
     loader = torch.utils.data.DataLoader(
-        ds, batch_size=min(args.batch, len(ds)), shuffle=True, drop_last=True,
+        ds, batch_size=min(args.batch, len(ds)), shuffle=sampler is None, sampler=sampler, drop_last=True,
         collate_fn=lambda b: (torch.stack([z for z, _ in b]), [c for _, c in b]))
     mean, std = (s.view(1, -1, 1, 1, 1).to(dev) for s in latent_stats())
 
@@ -75,6 +74,10 @@ def main():
         model.load_state_dict(sd["model"]), ema.model.load_state_dict(sd["ema"]), opt.load_state_dict(sd["opt"])
         step = sd["step"]
         log(f"resumed from step {step}")
+    elif args.init:
+        sd = torch.load(args.init, map_location="cpu")
+        model.load_state_dict(sd["ema"]), ema.model.load_state_dict(sd["ema"])
+        log(f"initialized from the EMA weights of {args.init} (step {sd['step']})")
     train_model = torch.compile(model) if args.compile else model
     n_params = sum(p.numel() for p in model.parameters()) / 1e6
     log(f"DiT-{args.preset}: {n_params:.1f}M params | {len(ds):,d} clips | batch {args.batch} | args {vars(args)}")
@@ -113,7 +116,7 @@ def main():
         if step % args.sample_every == 0 or step == args.steps or timeout:
             # the VAE only lives on the GPU while sampling: an 8 GB card can't hold it during training
             vae = WanVAE(dtype=torch.bfloat16)
-            prompts = PROMPTS + [truncate(ds.long[i]) for i in ds.index[:2]]  # last two: seen in training
+            prompts = PROMPTS + [ds.prompt(i) for i in ds.index[:2]]  # last two: seen in training
             videos = generate(ema.model, te, vae, prompts, shift=args.shift)
             del vae
             torch.cuda.empty_cache()
@@ -124,6 +127,14 @@ def main():
         if timeout:
             log(f"reached --max_minutes {args.max_minutes} at step {step}")
             break
+
+
+def main():
+    args = build_parser().parse_args()
+    ds = LatentDataset(args.data_dir, args.shards, args.short_captions)
+    if args.max_clips:
+        ds.index = ds.index[:args.max_clips]
+    train(args, ds)
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ dependencies = [
     "einops>=0.8.2",
     "lpips>=0.1.4",
     "transformers>=5.19.0",
+    "imageio-ffmpeg>=0.6.0",
 ]
 
 [tool.uv.sources]

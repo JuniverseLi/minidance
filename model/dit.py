@@ -194,3 +194,21 @@ class DiT(nn.Module):
 
 def build_dit(preset="small", **overrides):
     return DiT(DiTConfig(**{**PRESETS[preset], **overrides}))
+
+
+def load_dit(path, device="cuda", dtype=torch.float32):
+    """Load the EMA weights from a training checkpoint (.pt) or an exported .safetensors file."""
+    import json
+    if path.endswith(".safetensors"):
+        from safetensors import safe_open
+        from safetensors.torch import load_file
+        with safe_open(path, "pt") as f:
+            cfg = json.loads(f.metadata()["config"])
+        sd = load_file(path)
+    else:
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
+        cfg, sd = ckpt["dit_cfg"], ckpt["ema"]
+    cfg["patch"] = tuple(cfg["patch"])
+    model = DiT(DiTConfig(**cfg))
+    model.load_state_dict(sd)
+    return model.to(device, dtype).eval().requires_grad_(False)

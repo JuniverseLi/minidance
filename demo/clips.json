@@ -1,0 +1,10 @@
+[
+ {"name": "beach_sunset", "seed": 1, "prompt": "Ocean waves rolling onto a sandy beach at sunset, golden light on the water."},
+ {"name": "waterfall", "seed": 0, "prompt": "A waterfall cascading down mossy rocks into a clear pool."},
+ {"name": "aerial_river", "seed": 0, "prompt": "Aerial view of a turquoise river winding through autumn forest."},
+ {"name": "wheat_field", "seed": 1, "prompt": "Golden wheat field swaying in the wind at sunset."},
+ {"name": "misty_forest", "seed": 0, "prompt": "Sunlight streaming through tall pine trees in a misty forest."},
+ {"name": "waves_rocks", "seed": 1, "prompt": "Ocean waves crashing against dark rocks."},
+ {"name": "sea_sunset_zh", "seed": 2, "prompt": "海上日落，金色余晖映在水面。"},
+ {"name": "snow_mountain_lake_zh", "seed": 2, "prompt": "湖面倒映着雪山，微风吹起涟漪。"}
+]

@@ -27,10 +27,14 @@ def flow_loss(model, x0, y, mask, shift):
 
 
 @torch.no_grad()
-def sample(model, shape, y, mask, y_null, mask_null, steps=20, cfg=5.0, shift=3.0, generator=None):
-    """Euler sampler with classifier-free guidance. y_null/mask_null: encoding of the empty prompt."""
+def sample(model, shape, y, mask, y_null, mask_null, steps=20, cfg=5.0, shift=3.0, generator=None, noise=None,
+           callback=None):
+    """Euler sampler with classifier-free guidance. y_null/mask_null: encoding of the empty prompt.
+
+    callback(i, t, x, v): called after each step's velocity, e.g. to visualize denoising.
+    """
     B = shape[0]
-    x = torch.randn(shape, device=y.device, generator=generator)
+    x = noise if noise is not None else torch.randn(shape, device=y.device, generator=generator)
     ts = shift_t(torch.linspace(1, 0, steps + 1, device=y.device), shift)
     # pad cond / uncond text to the same length so they run as one batch
     L = max(y.shape[1], y_null.shape[1])
@@ -42,5 +46,7 @@ def sample(model, shape, y, mask, y_null, mask_null, steps=20, cfg=5.0, shift=3.
         t = ts[i].expand(B)
         v_c, v_u = model(torch.cat([x, x]), torch.cat([t, t]), yy, mm).float().chunk(2)
         v = v_u + cfg * (v_c - v_u)
+        if callback:
+            callback(i, ts[i], x, v)
         x = x + (ts[i + 1] - ts[i]) * v
     return x

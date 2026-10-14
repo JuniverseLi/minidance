@@ -41,10 +41,13 @@ def generate(model, text_encoder, vae, prompts, frames=9, steps=20, cfg=5.0, shi
     """prompts -> uint8 videos [N, T, H, W, 3]. frames = latent frames (9 -> 33 video frames)."""
     y, mask = text_encoder(prompts)
     y0, m0 = text_encoder([""])
-    g = torch.Generator(device=y.device).manual_seed(seed)
     shape = (len(prompts), model.cfg.in_channels, frames, 16, 16)
+    # every prompt starts from the same seeded noise, so a result doesn't depend on what else is in the batch
+    g = torch.Generator(device=y.device)
+    noise = torch.cat([torch.randn((1, *shape[1:]), device=y.device, generator=g.manual_seed(seed))
+                       for _ in prompts])
     with torch.autocast("cuda", dtype=torch.bfloat16):
-        z = sample(model, shape, y, mask, y0, m0, steps=steps, cfg=cfg, shift=shift, generator=g)
+        z = sample(model, shape, y, mask, y0, m0, steps=steps, cfg=cfg, shift=shift, noise=noise)
     videos = []
     for i in range(len(prompts)):  # decode one at a time to keep VRAM low
         x = vae.decode(vae.denormalize(z[i:i + 1]))

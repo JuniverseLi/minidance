@@ -1,0 +1,21 @@
+{
+  "name": "minidance-demo",
+  "private": true,
+  "description": "Demo video and architecture diagrams for MiniDance, made with Remotion",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render Demo ../out/minidance_demo.mp4",
+    "stills": "remotion still ArchPipeline ../images/arch_pipeline.png && remotion still ArchDiT ../images/arch_dit.png"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.529",
+    "@remotion/google-fonts": "4.0.529",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "remotion": "4.0.529"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.12",
+    "typescript": "5.9.2"
+  }
+}

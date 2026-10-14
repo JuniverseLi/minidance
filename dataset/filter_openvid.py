@@ -3,7 +3,7 @@
 Input : parquet produced by fetch_openvid_meta.py (merged)
 Output: filtered parquet + a printed funnel / scene distribution.
 
-    python dataset/filter_openvid.py --meta data/openvid_meta_all.parquet --out data/scenery.parquet
+    python dataset/filter_openvid.py --meta data/openvid_meta --out data/scenery.parquet
 """
 import argparse
 import re
@@ -89,7 +89,7 @@ def scene_of(text):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--meta", default="data/openvid_meta_all.parquet")
+    ap.add_argument("--meta", default="data/openvid_meta", help="parquet file or the folder from fetch_openvid_meta.py")
     ap.add_argument("--out", default="data/scenery.parquet")
     ap.add_argument("--min_seconds", type=float, default=2.5)
     ap.add_argument("--max_clips_per_video", type=int, default=4)

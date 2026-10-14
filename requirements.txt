@@ -1,0 +1,18 @@
+# pip alternative to `uv sync` (install a CUDA build of torch first, e.g.
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128 )
+numpy
+pandas
+pyarrow
+pylance
+opencv-python-headless
+pillow
+imageio
+imageio-ffmpeg
+tqdm
+huggingface_hub
+diffusers>=0.41.0
+accelerate>=1.15.0
+safetensors>=0.8.0
+einops>=0.8.2
+lpips>=0.1.4
+transformers>=5.19.0

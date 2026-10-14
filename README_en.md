@@ -258,17 +258,6 @@ The flow-matching loss is dominated by the randomly sampled noise level, so it h
 
 [MiniMind](https://github.com/jingyaogong/minimind) · [OpenVid-1M](https://github.com/NJU-PCALab/OpenVid-1M) · [Wan2.2](https://github.com/Wan-Video/Wan2.2) · [Qwen3](https://github.com/QwenLM/Qwen3) · [DiT](https://arxiv.org/abs/2212.09748) · [PixArt-α](https://arxiv.org/abs/2310.00426) · [Stable Diffusion 3](https://arxiv.org/abs/2403.03206) · [Flow Matching](https://arxiv.org/abs/2210.02747) · [Remotion](https://www.remotion.dev/)
 
-# 🎓 Citation
-
-```bibtex
-@misc{minidance,
-  title = {MiniDance: Train a Tiny Text-to-Video Model from Scratch},
-  author = {Ethen},
-  year = {2026},
-  url = {https://github.com/JuniverseLi/minidance}
-}
-```
-
 # ⚖️ License
 
 Code and MiniDance weights: [Apache License 2.0](LICENSE). Third-party components keep their own licenses: Wan2.2 VAE and Qwen3-0.6B are Apache 2.0; the training data comes from OpenVid-1M (CC BY 4.0), whose videos come from Pixabay, Pexels and Mixkit and belong to their authors. This project only distributes VAE latents and captions, not the original videos.

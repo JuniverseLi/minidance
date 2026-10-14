@@ -413,17 +413,6 @@ MiniDance 是一个"动态壁纸"模型：运动以水流、云动、草木摇�
 - [DiT](https://arxiv.org/abs/2212.09748)、[PixArt-α](https://arxiv.org/abs/2310.00426)（adaLN-single）、[Stable Diffusion 3](https://arxiv.org/abs/2403.03206)（Rectified Flow 与 logit-normal 采样）、[Flow Matching](https://arxiv.org/abs/2210.02747)
 - [Remotion](https://www.remotion.dev/)：架构图与演示视频
 
-# 🎓 引用
-
-```bibtex
-@misc{minidance,
-  title = {MiniDance: Train a Tiny Text-to-Video Model from Scratch},
-  author = {Ethen},
-  year = {2026},
-  url = {https://github.com/JuniverseLi/minidance}
-}
-```
-
 # ⚖️ 开源协议
 
 本项目代码与 MiniDance 权重采用 [Apache License 2.0](LICENSE) 开源协议。

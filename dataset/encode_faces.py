@@ -168,7 +168,8 @@ def main():
     ds = lance.dataset(URI)
     pool = ThreadPoolExecutor(max_workers=args.workers)
     tmp_dir = tempfile.mkdtemp(prefix="minidance_face_")
-    t0, done, kept = time.time(), 0, 0
+    t0, done, kept, last_log = time.time(), 0, 0, time.time()
+    print("encoding... (progress every 30 s; the first lines can take a few minutes)", flush=True)
 
     for s in todo:
         part = df.iloc[s * args.shard_size:(s + 1) * args.shard_size]
@@ -188,6 +189,10 @@ def main():
                 masks += [torch.from_numpy(clips[j][1]) for j in ok]
                 keep += [i * args.batch + j for j in ok]
             done += len(clips)
+            if time.time() - last_log > 30:  # downloads are slow: show life inside a shard
+                last_log = time.time()
+                print(f"  shard {s}: {(i + 1) * args.batch}/{len(part)} candidates, {len(keep)} faces kept, "
+                      f"{done / (time.time() - t0):.2f} clips/s", flush=True)
         kept += len(keep)
         base = os.path.join(args.out, f"shard_{s:05d}")
         if not keep:

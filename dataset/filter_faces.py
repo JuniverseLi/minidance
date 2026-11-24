@@ -35,8 +35,9 @@ def main():
     ap.add_argument("--meta", default="data/openvid_meta")
     ap.add_argument("--out", default="data/faces.parquet")
     ap.add_argument("--min_seconds", type=float, default=2.5, help="same as filter_openvid.py")
-    ap.add_argument("--all_sources", action="store_true",
-                    help="also keep non-stock sources (default: pixabay / pexels / mixkit only)")
+    ap.add_argument("--sources", nargs="+", default=["pixabay", "pexels", "mixkit"],
+                    help="keep these sources; add celebv for CelebV-HQ face clips (non-commercial license)")
+    ap.add_argument("--all_sources", action="store_true", help="keep every source (overrides --sources)")
     ap.add_argument("--closeup_only", action="store_true", help="caption must say close-up / portrait / face")
     ap.add_argument("--max_clips_per_video", type=int, default=4)
     args = ap.parse_args()
@@ -46,8 +47,8 @@ def main():
     parsed = df.video_path.map(parse_path)
     df["source"], df["video_id"] = parsed.str[0], parsed.str[1]
     if not args.all_sources:
-        df = df[df.source.isin({"pixabay", "pexels", "mixkit"})]
-        funnel.append(("stock sources", len(df)))
+        df = df[df.source.isin(set(args.sources))]
+        funnel.append(("selected sources", len(df)))
 
     df["head"] = df.caption.map(head)
     df = df[df["head"].str.contains(PERSON)]

@@ -17,13 +17,21 @@ def sample_t(batch, shift, device):
     return shift_t(torch.sigmoid(torch.randn(batch, device=device)), shift)
 
 
-def flow_loss(model, x0, y, mask, shift):
+def flow_loss(model, x0, y, mask, shift, weight=None):
+    """weight: optional per-position loss weight [B, 1, T, H, W] (e.g. 1 + λ * face mask).
+
+    The weighted loss is divided by the mean weight, so it stays on the same scale as plain MSE
+    and the learning rate does not need retuning.
+    """
     t = sample_t(x0.shape[0], shift, x0.device)
     noise = torch.randn_like(x0)
     tt = t.view(-1, *([1] * (x0.dim() - 1)))
     xt = (1 - tt) * x0 + tt * noise
     v = model(xt, t, y, mask)
-    return F.mse_loss(v.float(), (noise - x0).float())
+    if weight is None:
+        return F.mse_loss(v.float(), (noise - x0).float())
+    err = (v.float() - (noise - x0).float()).pow(2)
+    return (err * weight).mean() / weight.mean()
 
 
 @torch.no_grad()

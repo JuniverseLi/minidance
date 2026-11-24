@@ -1,7 +1,8 @@
 """Training data: pre-encoded latent shards + captions.
 
-Each item is (raw latent [48, 9, 16, 16] bf16, caption str). The caption is drawn at random from
-the long OpenVid caption (truncated) and, when available, our short English / Chinese prompts.
+Each item is (raw latent [48, 9, 16, 16] bf16, caption str), plus a face mask uint8 [9, 16, 16] for
+shards written by encode_faces.py. The caption is drawn at random from the long OpenVid caption
+(truncated) and, when available, our short English / Chinese prompts.
 """
 import glob
 import json
@@ -23,13 +24,16 @@ def truncate(caption, sentences=3):
 
 
 class LatentDataset(Dataset):
-    def __init__(self, shard_dir, shards=None, short_captions=None, p_long=0.3, p_zh=0.3):
+    def __init__(self, shard_dir, shards=None, short_captions=None, p_long=0.3, p_zh=0.3, drop_issues=BAD_ISSUES):
         """p_long: prob. of the (truncated) long caption; p_zh: share of Chinese among short ones."""
         files = sorted(glob.glob(os.path.join(shard_dir, "shard_*.safetensors")))
         if shards is not None:
             files = [f for f in files if int(os.path.basename(f)[6:11]) in set(shards)]
         assert files, f"no shards in {shard_dir}"
-        self.latents = torch.cat([load_file(f)["latents"] for f in files])
+        tensors = [load_file(f) for f in files]
+        self.latents = torch.cat([t["latents"] for t in tensors])
+        self.face_mask = torch.cat([t["face_mask"] for t in tensors]) if "face_mask" in tensors[0] else None
+        del tensors
         meta = pd.concat([pd.read_parquet(f.replace(".safetensors", ".parquet")) for f in files])
         self.rowids, self.long = meta._rowid.tolist(), meta.caption.tolist()
         self.meta = meta.reset_index(drop=True)
@@ -40,7 +44,7 @@ class LatentDataset(Dataset):
                 r = json.loads(line)
                 self.short[r["rowid"]] = r
         keep = [i for i, rid in enumerate(self.rowids)
-                if self.short.get(rid, {}).get("issue", "none") not in BAD_ISSUES]
+                if self.short.get(rid, {}).get("issue", "none") not in drop_issues]
         self.index = keep
         self.p_long, self.p_zh = p_long, p_zh
         print(f"LatentDataset: {len(files)} shards, {len(self.rowids):,d} clips, "
@@ -83,4 +87,6 @@ class LatentDataset(Dataset):
 
     def __getitem__(self, k):
         i = self.index[k]
+        if self.face_mask is not None:
+            return self.latents[i], self.caption(i), self.face_mask[i]
         return self.latents[i], self.caption(i)

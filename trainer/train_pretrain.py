@@ -41,19 +41,29 @@ def build_parser():
     ap.add_argument("--shift", type=float, default=3.0)
     ap.add_argument("--p_drop", type=float, default=0.1, help="caption dropout for CFG")
     ap.add_argument("--p_image", type=float, default=0.2, help="prob. a batch is trained as images (frame 0)")
+    ap.add_argument("--face_weight", type=float, default=0.0,
+                    help="loss weight = 1 + face_weight on face cells (needs face_mask shards)")
     ap.add_argument("--ema", type=float, default=0.999)
     ap.add_argument("--log_every", type=int, default=50)
     ap.add_argument("--sample_every", type=int, default=1000)
     ap.add_argument("--save_every", type=int, default=1000)
     ap.add_argument("--out", default="out/pretrain")
     ap.add_argument("--resume", action="store_true", help="continue from <out>/ckpt.pt if it exists")
-    ap.add_argument("--init", help="start from the EMA weights of another ckpt.pt (fresh optimizer)")
+    ap.add_argument("--init", help="start from the EMA weights of a ckpt.pt or an exported .safetensors "
+                                   "(fresh optimizer)")
     ap.add_argument("--compile", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
     return ap
 
 
-def train(args, ds, sampler=None):
+def collate(batch):
+    """(latent, caption[, face mask]) items -> (latents, captions, face masks or None)."""
+    z = torch.stack([b[0] for b in batch])
+    m = torch.stack([b[2] for b in batch]) if len(batch[0]) > 2 else None
+    return z, [b[1] for b in batch], m
+
+
+def train(args, ds, sampler=None, prompts=PROMPTS):
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -61,7 +71,7 @@ def train(args, ds, sampler=None):
     log = Logger(os.path.join(args.out, "train.log"))
     loader = torch.utils.data.DataLoader(
         ds, batch_size=min(args.batch, len(ds)), shuffle=sampler is None, sampler=sampler, drop_last=True,
-        collate_fn=lambda b: (torch.stack([z for z, _ in b]), [c for _, c in b]))
+        collate_fn=collate)
     mean, std = (s.view(1, -1, 1, 1, 1).to(dev) for s in latent_stats())
 
     te = TextEncoder(device=dev)
@@ -75,7 +85,11 @@ def train(args, ds, sampler=None):
         step = sd["step"]
         log(f"resumed from step {step}")
     elif args.init:
-        sd = torch.load(args.init, map_location="cpu")
+        if args.init.endswith(".safetensors"):  # released weights = EMA only
+            from safetensors.torch import load_file
+            sd = {"ema": load_file(args.init), "step": "released"}
+        else:
+            sd = torch.load(args.init, map_location="cpu")
         model.load_state_dict(sd["ema"]), ema.model.load_state_dict(sd["ema"])
         log(f"initialized from the EMA weights of {args.init} (step {sd['step']})")
     train_model = torch.compile(model) if args.compile else model
@@ -85,19 +99,23 @@ def train(args, ds, sampler=None):
     it, t_log, seen, t_start = iter(loader), time.time(), 0, time.time()
     while step < args.steps:
         try:
-            z, caps = next(it)
+            z, caps, fmask = next(it)
         except StopIteration:
             it = iter(loader)
-            z, caps = next(it)
+            z, caps, fmask = next(it)
         for g in opt.param_groups:
             g["lr"] = get_lr(step, args.steps, args.warmup, args.lr)
         x0 = (z.to(dev).float() - mean) / std
+        weight = None
+        if args.face_weight and fmask is not None:
+            weight = 1 + args.face_weight * fmask.to(dev).float().unsqueeze(1)  # [B, 1, T, H, W]
         if random.random() < args.p_image:
             x0 = x0[:, :, :1]  # causal VAE: latent frame 0 is the first frame alone = an image
+            weight = weight[:, :, :1] if weight is not None else None
         caps = ["" if random.random() < args.p_drop else c for c in caps]
         y, mask = te(caps)
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            loss = flow_loss(train_model, x0, y, mask, args.shift)
+            loss = flow_loss(train_model, x0, y, mask, args.shift, weight)
         loss.backward()
         gnorm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
@@ -116,12 +134,12 @@ def train(args, ds, sampler=None):
         if step % args.sample_every == 0 or step == args.steps or timeout:
             # the VAE only lives on the GPU while sampling: an 8 GB card can't hold it during training
             vae = WanVAE(dtype=torch.bfloat16)
-            prompts = PROMPTS + [ds.prompt(i) for i in ds.index[:2]]  # last two: seen in training
-            videos = generate(ema.model, te, vae, prompts, shift=args.shift)
+            shown = prompts + [ds.prompt(i) for i in ds.index[:2]]  # last two: seen in training
+            videos = generate(ema.model, te, vae, shown, shift=args.shift)
             del vae
             torch.cuda.empty_cache()
             save_gif(videos, os.path.join(args.out, "samples", f"step_{step:06d}.gif"))
-            log(f"samples -> {args.out}/samples/step_{step:06d}.gif | prompts: {prompts[-2:]}")
+            log(f"samples -> {args.out}/samples/step_{step:06d}.gif | prompts: {shown[-2:]}")
         if step % args.save_every == 0 or step == args.steps or timeout:
             save_checkpoint(ckpt, model, ema, opt, step, args)
         if timeout:

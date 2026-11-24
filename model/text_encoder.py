@@ -1,7 +1,12 @@
-"""Frozen text encoder: Qwen3-0.6B hidden states (multilingual, so Chinese prompts work too)."""
+"""Frozen text encoder: Qwen3-0.6B hidden states (multilingual, so Chinese prompts work too).
+
+Set MINIDANCE_TEXT_ENCODER to a local copy (e.g. downloaded from ModelScope) where HF is unreachable.
+"""
+import os
+
 import torch
 
-TEXT_ENCODER_REPO = "Qwen/Qwen3-0.6B"
+TEXT_ENCODER_REPO = os.environ.get("MINIDANCE_TEXT_ENCODER", "Qwen/Qwen3-0.6B")
 
 
 class TextEncoder:

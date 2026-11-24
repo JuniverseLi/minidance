@@ -56,7 +56,7 @@ def decode_clip(data, tmp_dir):
     return np.stack([cv2.resize(frames[i], (SIZE, SIZE), interpolation=cv2.INTER_AREA)[..., ::-1] for i in idx])
 
 
-def fetch(ds, rowids, tmp_dir, retries=4):
+def fetch(ds, rowids, tmp_dir, retries=4, decode=decode_clip):
     """Download + decode one batch; runs in a worker thread while the GPU encodes.
 
     Network errors (e.g. HF rate limits) are retried with backoff; a batch that keeps
@@ -68,7 +68,7 @@ def fetch(ds, rowids, tmp_dir, retries=4):
             clips = []
             for blob in blobs:
                 with blob as f:
-                    clips.append(decode_clip(f.read(), tmp_dir))
+                    clips.append(decode(f.read(), tmp_dir))
             return clips
         except Exception as e:
             print(f"  fetch failed ({attempt + 1}/{retries}): {str(e)[:200]}", flush=True)

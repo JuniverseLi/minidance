@@ -2,17 +2,25 @@
 
 It is causal: latent frame 0 encodes only video frame 0, so a single image is
 just a 1-frame video. 33 frames -> 9 latent frames.
+
+Set MINIDANCE_VAE to a local copy of the repo (only vae/ is needed) where HF is unreachable.
 """
+import os
+
 import torch
 
-WAN_VAE_REPO = "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
+WAN_VAE_REPO = os.environ.get("MINIDANCE_VAE", "Wan-AI/Wan2.2-TI2V-5B-Diffusers")
 
 
 def latent_stats(repo=WAN_VAE_REPO):
     """Per-channel latent mean/std [48] from the VAE config, without loading the weights."""
     import json
-    from huggingface_hub import hf_hub_download
-    c = json.load(open(hf_hub_download(repo, "vae/config.json")))
+    if os.path.isdir(repo):
+        path = os.path.join(repo, "vae", "config.json")
+    else:
+        from huggingface_hub import hf_hub_download
+        path = hf_hub_download(repo, "vae/config.json")
+    c = json.load(open(path))
     return torch.tensor(c["latents_mean"]), torch.tensor(c["latents_std"])
 
 

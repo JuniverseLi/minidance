@@ -4,12 +4,13 @@ Differences from encode_latents.py:
   - frame rate pinned to ~--fps (OpenVid's Lance blobs are all 64 frames at 24 fps, so this matches
     encode_latents; the check only matters for other sources with different lengths / fps)
   - one fixed square crop around the face (median box over the clip; a moving crop would add
-    fake camera motion), sized so the detected face is ~--face_frac of the side
+    fake camera motion), sized so the detected face is ~--face_frac of the side (a tight
+    close-up: the face needs as many of the 8x8 DiT tokens per frame as it can get)
   - clips without exactly one clear face in >= 90% of the frames are dropped
   - each shard also stores face_mask uint8 [N, 9, 16, 16]: latent cells that contain the face,
     used to up-weight the face in the flow loss
 
-    python dataset/encode_faces.py --parquet data/faces.parquet --out data/face_latents
+    python dataset/encode_faces.py --parquet data/faces.parquet --out data/face_latents_tight
 """
 import argparse
 import functools
@@ -50,8 +51,12 @@ def detect(frame, yunet, max_side=640):
     return sorted((f[:4] / s for f in faces), key=lambda b: -b[2] * b[3])
 
 
-def face_crop(boxes, H, W, face_frac):
-    """Fixed square crop (x0, y0, side) around the median face, or None if the face leaves it."""
+def face_crop(boxes, H, W, face_frac, margin=0.25):
+    """Fixed square crop (x0, y0, side) around the median face, or None if the face drifts.
+
+    The face centre must stay in [margin, 1 - margin] of the crop: with face_frac 0.75 the face
+    box is 3/4 of the side, so 0.25 lets it move ~1/3 of its size before it is mostly cut off.
+    """
     arr = np.array([b for b in boxes if b is not None])
     size = np.median(np.maximum(arr[:, 2], arr[:, 3]))
     cx, cy = np.median(arr[:, 0] + arr[:, 2] / 2), np.median(arr[:, 1] + arr[:, 3] / 2)
@@ -59,7 +64,7 @@ def face_crop(boxes, H, W, face_frac):
     x0 = float(np.clip(cx - side / 2, 0, W - side))
     y0 = float(np.clip(cy - side / 2, 0, H - side))
     centers = np.stack([arr[:, 0] + arr[:, 2] / 2 - x0, arr[:, 1] + arr[:, 3] / 2 - y0], 1) / side
-    if centers.min() < 0.15 or centers.max() > 0.85:  # face drifts to the crop border
+    if centers.min() < margin or centers.max() > 1 - margin:  # face drifts to the crop border
         return None
     return x0, y0, side, size
 
@@ -94,7 +99,7 @@ def pick_frames(n, src_fps, fps, tol=0.8):
     return np.round(start + np.arange(FRAMES) * step).astype(int)
 
 
-def decode_face_clip(data, tmp_dir, yunet, fps=12, face_frac=0.5, min_face=100):
+def decode_face_clip(data, tmp_dir, yunet, fps=12, face_frac=0.75, min_face=160):
     """mp4 bytes -> (uint8 [FRAMES, SIZE, SIZE, 3] RGB, uint8 face mask [9, 16, 16]) or None."""
     with tempfile.NamedTemporaryFile(suffix=".mp4", dir=tmp_dir, delete=False) as f:
         f.write(data)
@@ -137,14 +142,18 @@ def decode_face_clip(data, tmp_dir, yunet, fps=12, face_frac=0.5, min_face=100):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--parquet", default="data/faces.parquet")
-    ap.add_argument("--out", default="data/face_latents")
+    ap.add_argument("--out", default="data/face_latents_tight",
+                    help="finished shards are skipped: use a new dir after changing the crop")
     ap.add_argument("--shard_size", type=int, default=512)
     ap.add_argument("--shards", type=int, nargs="*", help="only these shard ids (default: all)")
     ap.add_argument("--batch", type=int, default=8, help="clips per VAE forward")
     ap.add_argument("--workers", type=int, default=4, help="download + face detection threads")
     ap.add_argument("--fps", type=float, default=12)
-    ap.add_argument("--face_frac", type=float, default=0.5, help="face box size / crop side")
-    ap.add_argument("--min_face", type=float, default=100, help="min face box size in source pixels")
+    # 256 px -> 16 latent cells -> 8 DiT tokens across: at 0.5 a face got only ~4 tokens and its
+    # features came out scrambled; 0.75 gives ~6 (2.25x the tokens per face) at the same compute
+    ap.add_argument("--face_frac", type=float, default=0.75, help="face box size / crop side")
+    ap.add_argument("--min_face", type=float, default=160,
+                    help="min face box size in source pixels (crop >= min_face / face_frac, little upscaling)")
     ap.add_argument("--yunet", help="local face_detection_yunet_2023mar.onnx (default: download from HF)")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()

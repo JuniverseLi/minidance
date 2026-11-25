@@ -8,6 +8,10 @@ Same training loop as pretraining, but
   - weights: start from the pretrained EMA weights (minidance-base), no extra parameters
 
     python trainer/train_face.py --init out/minidance-base.safetensors --out out/face --compile
+
+A second round can start from the first one's EMA weights (it already knows hair, skin, clothes):
+
+    python trainer/train_face.py --init out/face/ckpt.pt --out out/face_tight --steps 10000
 """
 import os
 import sys
@@ -18,10 +22,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dataset.latent_dataset import LatentDataset
 from trainer.train_pretrain import build_parser, train
 
+# OpenVid caption style ("The video features ..."): the face clips are only captioned this way
 PROMPTS = [
-    "A close-up of a young woman with long dark hair smiling at the camera.",
-    "A close-up of a middle-aged man with glasses talking calmly.",
-    "A close-up of an elderly woman with white hair slowly turning her head.",
+    "The video features a young woman with long dark hair, smiling at the camera.",
+    "The video features a middle-aged man with glasses and short hair, talking calmly.",
+    "The video shows an elderly woman with white hair, slowly turning her head.",
     "海上日落，小浪拍岸，金色余晖映在水面。",  # scenery must survive the face training
 ]
 
@@ -60,13 +65,15 @@ def main():
     ap.add_argument("--scenery_dir", default="data/latents", help="released scenery latents ('' = faces only)")
     ap.add_argument("--scenery_captions", default="data/short_captions.jsonl")
     ap.add_argument("--scenery_ratio", type=float, default=0.25, help="share of scenery clips in each batch")
-    ap.set_defaults(data_dir="data/face_latents", short_captions=None, preset="base", batch=64,
+    ap.set_defaults(data_dir="data/face_latents_tight", short_captions=None, preset="base", batch=64,
                     lr=1e-4, warmup=500, steps=8000, p_image=0.1, face_weight=2.0,
                     sample_every=2000, save_every=1000, out="out/face")
     args = ap.parse_args()
 
-    # face shards have no short captions: always the (truncated) long OpenVid caption, nothing dropped
-    face = LatentDataset(args.data_dir, args.shards, args.short_captions, p_long=1.0, drop_issues=set())
+    # face shards have no short captions: always the long OpenVid caption, nothing dropped; cut to a
+    # random 1-3 sentences so one-line prompts work too (with 3 only, short prompts gave no face)
+    face = LatentDataset(args.data_dir, args.shards, args.short_captions, p_long=1.0, drop_issues=set(),
+                         min_sentences=1)
     assert face.face_mask is not None, f"{args.data_dir} has no face_mask: build it with dataset/encode_faces.py"
     if args.max_clips:
         face.index = face.index[:args.max_clips]
